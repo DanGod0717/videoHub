@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "视频平台",
+    "slug": "video-app",
+    "scheme": "videoapp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.videoplatform.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#000000"
+      },
+      "package": "com.videoplatform.app"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-av",
+      "expo-image-picker",
+      "expo-asset",
+      "expo-font"
+    ]
+  }
+}

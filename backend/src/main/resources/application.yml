@@ -1,0 +1,51 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/postgres
+    username: postgres
+    password: ${SUPABASE_DB_PASSWORD:987275486}
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+
+  async:
+    core-pool-size: 2
+    max-pool-size: 4
+
+supabase:
+  url: http://localhost:8000
+  service-role-key: ${SUPABASE_SERVICE_KEY:}
+
+minio:
+  endpoint: http://localhost:9000
+  access-key: ${MINIO_ACCESS_KEY:supa-storage}
+  secret-key: ${MINIO_SECRET_KEY:secret1234}
+  buckets:
+    raw: raw-videos
+    transcoded: transcoded
+    thumbnails: thumbnails
+
+transcode:
+  qualities:
+    480p:
+      width: 854
+      height: 480
+      video-bitrate: 800k
+      audio-bitrate: 128k
+    720p:
+      width: 1280
+      height: 720
+      video-bitrate: 1500k
+      audio-bitrate: 128k
+    1080p:
+      width: 1920
+      height: 1080
+      video-bitrate: 3000k
+      audio-bitrate: 192k
+  hls-segment-time: 6
+  preset: fast
+  timeout-minutes: 10
+  thumbnail-second: 3
+  temp-dir: /tmp/video-transcoder
