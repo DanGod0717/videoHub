@@ -93,3 +93,42 @@ mvn spring-boot:run
 | 存储 | Supabase Storage + MinIO |
 | 实时 | Supabase Realtime |
 | 转码 | Java Spring Boot + FFmpeg |
+
+
+### java转码功能
+
+ 转码全流程
+
+  1. 抢任务
+     UPDATE videos SET status='processing' WHERE id=? AND status='uploading'
+     → 只有第一个抢到的实例能改成功（原子操作防重复）
+
+  2. 下载原片
+     从 Supabase Storage (MinIO) 下载用户上传的 .mp4
+
+  3. 分析视频
+     ffprobe → 拿到时长、分辨率、编码格式
+
+  4. 多码率转码（并行）
+     原片 1080p → ffmpeg → 480p.mp4  (854×480,  800kbps)
+               → ffmpeg → 720p.mp4  (1280×720, 1500kbps)
+               → ffmpeg → 1080p.mp4 (1920×1080,3000kbps)
+
+     智能跳过：原片只有 720p → 不转 1080p，省 CPU
+
+  5. 截缩略图
+     ffmpeg -ss 3 -vframes 1 → 截取第 3 秒画面 → thumb.jpg
+
+  6. 上传产物
+     转码后的视频 + 缩略图 → 上传回 Supabase Storage
+
+  7. 更新数据库
+     UPDATE videos SET status='ready', transcoded=[...], hls_url='...', thumbnail_url='...'
+
+  8. 清理
+     删除原片（省存储空间）+ 删除本地临时文件
+
+  ---
+  一句话
+  
+  ▎ Java 把用户上传的一个大原片，变成多个清晰度的小视频 + 一张封面图，让不同网速的人都能流畅观看
