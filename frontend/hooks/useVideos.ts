@@ -11,7 +11,7 @@ export function useVideos() {
         .from('videos')
         .select('*')
         .eq('status', 'ready')
-        .order('created_at', { ascending: false })
+        .order('view_count', { ascending: false })
         .limit(20);
 
       if (error || !data) return [];

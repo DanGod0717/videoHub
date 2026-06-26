@@ -3,7 +3,7 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/postgres
+    url: jdbc:postgresql://localhost:5433/postgres
     username: postgres
     password: ${SUPABASE_DB_PASSWORD:987275486}
     hikari:
@@ -16,12 +16,12 @@ spring:
 
 supabase:
   url: http://localhost:8000
-  service-role-key: ${SUPABASE_SERVICE_KEY:}
+  service-role-key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoic3VwYWJhc2UiLCJpYXQiOjE3ODIzMTM4ODEsImV4cCI6MTkzOTk5Mzg4MX0.EV7_V78kN02WAPfLElHvnhBAJCx53lUQvipeFxXSvSI
 
 minio:
   endpoint: http://localhost:9000
-  access-key: ${MINIO_ACCESS_KEY:supa-storage}
-  secret-key: ${MINIO_SECRET_KEY:secret1234}
+  access-key: supa-storage
+  secret-key: 94ff006066cc0f521f3621d18a2229a0
   buckets:
     raw: raw-videos
     transcoded: transcoded

@@ -2,7 +2,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image } fro
 import { useState } from 'react';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase } from '../../lib/supabase';
+import { supabase, API_BASE } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function UploadScreen() {
@@ -85,12 +85,16 @@ export default function UploadScreen() {
         description: description.trim(),
         original_url: filePath,
         original_size: blob.size,
-        status: 'ready',  // 暂时跳过转码，直接 ready
+        status: 'uploading',  // 等待 Java 转码
       });
 
       if (dbError) throw dbError;
 
-      Alert.alert('发布成功', '视频已发布！');
+      // 触发 Java 转码
+      fetch(`${API_BASE}/videos/${videoId}/transcode`, { method: 'POST' })
+        .catch(e => console.log('转码触发:', e.message));
+
+      Alert.alert('发布成功', '视频正在转码中，稍后出现在首页');
       router.push('/(tabs)/home');
     } catch (e: any) {
       Alert.alert('发布失败', e.message || String(e));

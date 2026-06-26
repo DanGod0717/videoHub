@@ -10,9 +10,16 @@ export function VideoCard({ video }: { video: Video }) {
 
   const timeAgo = (date: string) => {
     const diff = Date.now() - new Date(date).getTime();
-    const hours = Math.floor(diff / 3600000);
+    const sec = Math.floor(diff / 1000);
+    if (sec < 60) return '刚刚';
+    const mins = Math.floor(sec / 60);
+    if (mins < 60) return `${mins}分钟前`;
+    const hours = Math.floor(mins / 60);
     if (hours < 24) return `${hours}小时前`;
-    return `${Math.floor(hours / 24)}天前`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days}天前`;
+    if (days < 365) return `${Math.floor(days / 30)}个月前`;
+    return `${Math.floor(days / 365)}年前`;
   };
 
   return (

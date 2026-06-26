@@ -17,7 +17,7 @@ export default function RegisterScreen() {
     setLoading(true);
     try {
       await signUp(email.trim(), password, username.trim());
-      Alert.alert('注册成功！', '请回到登录页登录', [{ text: '去登录', onPress: () => router.back() }]);
+      router.replace('/(tabs)/home');
     } catch (e: any) { Alert.alert('注册失败', e.message); }
     setLoading(false);
   };

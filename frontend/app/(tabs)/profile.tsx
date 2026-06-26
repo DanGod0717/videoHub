@@ -1,25 +1,94 @@
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, Image } from 'react-native';
 import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
+import * as ImagePicker from 'expo-image-picker';
+import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function ProfileScreen() {
   const { user, isLoggedIn, signOut } = useAuth();
+  const [profile, setProfile] = useState<any>(null);
+  const [editing, setEditing] = useState(false);
+  const [username, setUsername] = useState('');
+  const [bio, setBio] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [stats, setStats] = useState({ videos: 0, followers: 0, following: 0 });
+
+  const pickAvatar = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    setUploadingAvatar(true);
+    try {
+      const file = result.assets[0];
+      const filePath = `${user!.id}.jpg`;
+      const response = await fetch(file.uri);
+      const blob = await response.blob();
+      const { error: uploadError } = await supabase.storage.from('avatars')
+        .upload(filePath, blob, { contentType: 'image/jpeg', upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrl } = supabase.storage.from('avatars').getPublicUrl(filePath);
+      const { error: updateError } = await supabase.from('profiles')
+        .update({ avatar_url: publicUrl.publicUrl }).eq('user_id', user!.id);
+      if (updateError) throw updateError;
+
+      setProfile({ ...profile, avatar_url: publicUrl.publicUrl });
+    } catch (e: any) { Alert.alert('上传失败', e.message); }
+    setUploadingAvatar(false);
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    // 个人资料
+    supabase.from('profiles').select('*').eq('user_id', user.id).single().then(({ data }) => {
+      if (data) {
+        setProfile(data);
+        setUsername(data.username || '');
+        setBio(data.bio || '');
+      }
+    });
+    // 统计数据
+    Promise.all([
+      supabase.from('videos').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+      supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', user.id),
+      supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', user.id),
+    ]).then(([vRes, fRes, gRes]) => {
+      setStats({
+        videos: vRes.count ?? 0,
+        followers: fRes.count ?? 0,
+        following: gRes.count ?? 0,
+      });
+    });
+  }, [user]);
+
+  const saveProfile = async () => {
+    if (!username.trim()) { Alert.alert('用户名不能为空'); return; }
+    setSaving(true);
+    const { error } = await supabase.from('profiles')
+      .update({ username: username.trim(), bio: bio.trim() })
+      .eq('user_id', user!.id);
+    setSaving(false);
+    if (error) Alert.alert('保存失败', error.message);
+    else {
+      setProfile({ ...profile, username: username.trim(), bio: bio.trim() });
+      setEditing(false);
+    }
+  };
 
   if (!isLoggedIn) {
     return (
       <View style={styles.container}>
-        {/* 顶部栏 */}
         <View style={styles.topBar}>
-          <View style={styles.searchBox}>
-            <Text style={styles.searchIcon}>🔍</Text>
-            <TextInput style={styles.searchInput} placeholder="搜索视频..." placeholderTextColor="#999" />
-          </View>
+          <Text style={styles.headerTitle}>我的</Text>
           <Text style={styles.loginBtn} onPress={() => router.push('/auth/login')}>登录</Text>
         </View>
         <View style={styles.notLoggedIn}>
           <Text style={styles.notLoggedIcon}>👤</Text>
           <Text style={styles.notLoggedTitle}>登录后查看更多</Text>
-          <Text style={styles.notLoggedDesc}>上传视频、管理你的内容</Text>
           <TouchableOpacity style={styles.loginLink} onPress={() => router.push('/auth/login')}>
             <Text style={styles.loginLinkText}>去登录</Text>
           </TouchableOpacity>
@@ -32,39 +101,68 @@ export default function ProfileScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
       {/* 顶部栏 */}
       <View style={styles.topBar}>
-        <View style={styles.searchBox}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput style={styles.searchInput} placeholder="搜索视频..." placeholderTextColor="#999" />
-        </View>
-        <View style={styles.userBadge}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarLetter}>{user?.email?.[0]?.toUpperCase() ?? '?'}</Text>
-          </View>
-          <Text style={styles.userName}>{user?.email?.split('@')[0]}</Text>
-        </View>
+        <Text style={styles.headerTitle}>我的</Text>
+        <TouchableOpacity onPress={async () => { await signOut(); router.replace('/(tabs)/home'); }}>
+          <Text style={styles.logoutLink}>退出</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* 个人卡片 */}
-      <View style={styles.profileCard}>
-        <View style={styles.avatarLarge}>
-          <Text style={styles.avatarLargeLetter}>{user?.email?.[0]?.toUpperCase() ?? '?'}</Text>
+      {/* 个人信息卡片 */}
+      <View style={styles.card}>
+        <TouchableOpacity onPress={pickAvatar} disabled={uploadingAvatar}>
+          {profile?.avatar_url ? (
+            <Image source={{ uri: profile.avatar_url }} style={styles.avatarLarge} />
+          ) : (
+            <View style={styles.avatarLarge}>
+              <Text style={styles.avatarText}>{user?.email?.[0]?.toUpperCase() ?? '?'}</Text>
+            </View>
+          )}
+          <Text style={styles.avatarHint}>{uploadingAvatar ? '上传中...' : '点击更换头像'}</Text>
+        </TouchableOpacity>
+
+        {editing ? (
+          <View style={styles.editForm}>
+            <Text style={styles.label}>用户名</Text>
+            <TextInput style={styles.input} value={username} onChangeText={setUsername} placeholder="输入用户名" placeholderTextColor="#bbb" />
+            <Text style={styles.label}>简介</Text>
+            <TextInput style={[styles.input, styles.bioInput]} value={bio} onChangeText={setBio} placeholder="介绍一下自己..." placeholderTextColor="#bbb" multiline numberOfLines={3} />
+            <View style={styles.editBtns}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => { setUsername(profile?.username || ''); setBio(profile?.bio || ''); setEditing(false); }}>
+                <Text style={styles.cancelBtnText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.saveBtn, saving && styles.btnDisabled]} onPress={saveProfile} disabled={saving}>
+                <Text style={styles.saveBtnText}>{saving ? '保存中...' : '保存'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.profileInfo}>
+            <Text style={styles.username}>{profile?.username || user?.email?.split('@')[0]}</Text>
+            <Text style={styles.email}>{user?.email}</Text>
+            {profile?.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
+            <Text style={styles.userId}>ID: {user?.id?.slice(0, 8)}...</Text>
+            <TouchableOpacity style={styles.editBtn} onPress={() => setEditing(true)}>
+              <Text style={styles.editBtnText}>编辑资料</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* 统计 */}
+      <View style={styles.statsRow}>
+        <View style={styles.statItem}>
+          <Text style={styles.statNum}>{stats.videos}</Text>
+          <Text style={styles.statLabel}>视频</Text>
         </View>
-        <Text style={styles.email}>{user?.email}</Text>
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNum}>0</Text>
-            <Text style={styles.statLabel}>视频</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNum}>0</Text>
-            <Text style={styles.statLabel}>粉丝</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNum}>0</Text>
-            <Text style={styles.statLabel}>关注</Text>
-          </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={styles.statNum}>{stats.followers}</Text>
+          <Text style={styles.statLabel}>粉丝</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={styles.statNum}>{stats.following}</Text>
+          <Text style={styles.statLabel}>关注</Text>
         </View>
       </View>
 
@@ -84,14 +182,10 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      <TouchableOpacity style={styles.logoutBtn} onPress={() => {
-        Alert.alert('退出登录', '确定要退出吗？', [
-          { text: '取消', style: 'cancel' },
-          { text: '退出', style: 'destructive', onPress: async () => { await signOut(); router.replace('/(tabs)/home'); }},
-        ]);
-      }}>
-        <Text style={styles.logoutText}>退出登录</Text>
-      </TouchableOpacity>
+      {/* 创建时间 */}
+      <Text style={styles.createdAt}>
+        加入于 {profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : '--'}
+      </Text>
     </ScrollView>
   );
 }
@@ -102,56 +196,70 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f4f5f7' },
   scrollContent: { paddingBottom: 60 },
 
-  // 顶部栏
+  // 顶部
   topBar: {
-    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 12,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingTop: 48, paddingBottom: 12, paddingHorizontal: 24,
     backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e6eb',
   },
-  searchBox: {
-    flex: 1, flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#f1f2f3', borderRadius: 8, paddingHorizontal: 12, height: 36,
-  },
-  searchIcon: { fontSize: 14, marginRight: 8 },
-  searchInput: { flex: 1, fontSize: 14, color: '#333', outlineStyle: 'none' as any },
-  loginBtn: { color: PINK, fontSize: 14, fontWeight: '600', marginLeft: 24 },
-  userBadge: { flexDirection: 'row', alignItems: 'center', marginLeft: 24 },
-  avatar: {
-    width: 32, height: 32, borderRadius: 16, backgroundColor: PINK,
-    justifyContent: 'center', alignItems: 'center', marginRight: 8,
-  },
-  avatarLetter: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  userName: { fontSize: 14, color: '#333', fontWeight: '500' },
+  headerTitle: { fontSize: 20, fontWeight: '700', color: '#1a1a2e' },
+  loginBtn: { color: PINK, fontSize: 14, fontWeight: '600' },
+  logoutLink: { color: '#9499a0', fontSize: 14 },
 
   // 未登录
   notLoggedIn: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 120 },
   notLoggedIcon: { fontSize: 64, marginBottom: 16 },
-  notLoggedTitle: { fontSize: 18, fontWeight: '600', color: '#333', marginBottom: 8 },
-  notLoggedDesc: { fontSize: 14, color: '#999', marginBottom: 24 },
+  notLoggedTitle: { fontSize: 18, fontWeight: '600', color: '#333', marginBottom: 24 },
   loginLink: { backgroundColor: PINK, borderRadius: 8, paddingHorizontal: 40, paddingVertical: 12 },
   loginLinkText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 
-  // 个人卡片
-  profileCard: {
+  // 个人信息卡片
+  card: {
     backgroundColor: '#fff', alignItems: 'center', padding: 32, margin: 24,
-    borderRadius: 12, maxWidth: 600, alignSelf: 'center', width: '100%',
+    borderRadius: 12, maxWidth: 500, alignSelf: 'center', width: '100%',
   },
-  avatarLarge: {
-    width: 80, height: 80, borderRadius: 40, backgroundColor: PINK,
-    justifyContent: 'center', alignItems: 'center', marginBottom: 12,
+  avatarLarge: { width: 80, height: 80, borderRadius: 40, backgroundColor: PINK, justifyContent: 'center', alignItems: 'center' },
+  avatarText: { color: '#fff', fontSize: 32, fontWeight: '700' },
+  avatarHint: { fontSize: 12, color: '#9499a0', marginTop: 8, textAlign: 'center' },
+  profileInfo: { alignItems: 'center', width: '100%' },
+  username: { fontSize: 20, fontWeight: '700', color: '#18191c', marginBottom: 4 },
+  email: { fontSize: 14, color: '#9499a0', marginBottom: 4 },
+  bio: { fontSize: 14, color: '#333', marginTop: 8, marginBottom: 8, textAlign: 'center', lineHeight: 20, paddingHorizontal: 20 },
+  userId: { fontSize: 12, color: '#ccc', marginBottom: 16 },
+  editBtn: { paddingHorizontal: 24, paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: '#e5e6eb' },
+  editBtnText: { fontSize: 14, color: '#666', fontWeight: '500' },
+
+  // 编辑表单
+  editForm: { width: '100%' },
+  label: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 6, marginLeft: 2, marginTop: 8 },
+  input: {
+    borderWidth: 1, borderColor: '#e5e6eb', borderRadius: 8, padding: 12,
+    fontSize: 15, backgroundColor: '#f9f9fa', color: '#333', marginBottom: 12,
+    outlineStyle: 'none' as any, width: '100%',
   },
-  avatarLargeLetter: { color: '#fff', fontSize: 32, fontWeight: '700' },
-  email: { fontSize: 16, fontWeight: '600', color: '#333', marginBottom: 20 },
+  bioInput: { height: 80, textAlignVertical: 'top' },
+  editBtns: { flexDirection: 'row', gap: 12, marginTop: 8 },
+  cancelBtn: { flex: 1, padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#e5e6eb', alignItems: 'center' },
+  cancelBtnText: { color: '#666', fontSize: 15, fontWeight: '500' },
+  saveBtn: { flex: 1, padding: 12, borderRadius: 8, backgroundColor: PINK, alignItems: 'center' },
+  saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  btnDisabled: { opacity: 0.6 },
+
+  // 统计
   statsRow: {
-    flexDirection: 'row', alignItems: 'center', width: '100%',
-    justifyContent: 'center', gap: 40,
+    flexDirection: 'row', backgroundColor: '#fff', marginHorizontal: 24, borderRadius: 12,
+    padding: 16, maxWidth: 500, alignSelf: 'center', width: '100%',
   },
-  statItem: { alignItems: 'center' },
-  statNum: { fontSize: 22, fontWeight: '700', color: '#18191c' },
-  statLabel: { fontSize: 13, color: '#9499a0', marginTop: 4 },
+  statItem: { flex: 1, alignItems: 'center' },
+  statNum: { fontSize: 20, fontWeight: '700', color: '#18191c' },
+  statLabel: { fontSize: 12, color: '#9499a0', marginTop: 4 },
   statDivider: { width: 1, height: 30, backgroundColor: '#e5e6eb' },
 
   // 菜单
-  menu: { backgroundColor: '#fff', marginHorizontal: 24, borderRadius: 12, maxWidth: 600, alignSelf: 'center', width: '100%' },
+  menu: {
+    backgroundColor: '#fff', margin: 24, borderRadius: 12, paddingVertical: 4,
+    maxWidth: 500, alignSelf: 'center', width: '100%',
+  },
   menuItem: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#f4f5f7',
@@ -160,11 +268,6 @@ const styles = StyleSheet.create({
   menuText: { fontSize: 15, color: '#333' },
   menuArrow: { fontSize: 22, color: '#ccc' },
 
-  // 退出
-  logoutBtn: {
-    marginHorizontal: 24, marginTop: 24, borderRadius: 8, padding: 15,
-    alignItems: 'center', borderWidth: 1, borderColor: '#e5e6eb',
-    backgroundColor: '#fff', maxWidth: 600, alignSelf: 'center', width: '100%',
-  },
-  logoutText: { color: '#9499a0', fontSize: 15, fontWeight: '500' },
+  // 加入时间
+  createdAt: { textAlign: 'center', fontSize: 12, color: '#ccc', marginBottom: 24 },
 });
