@@ -15,7 +15,11 @@ export default function LoginScreen() {
     try {
       await signIn(email.trim(), password);
       router.replace('/(tabs)/home');
-    } catch (e: any) { Alert.alert('登录失败', e.message); }
+    } catch (e: any) {
+      const msg = e.message || '未知错误';
+      if (typeof window !== 'undefined') window.alert('登录失败：' + msg);
+      else Alert.alert('登录失败', msg);
+    }
     setLoading(false);
   };
 

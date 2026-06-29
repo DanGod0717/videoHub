@@ -18,7 +18,14 @@ export default function RegisterScreen() {
     try {
       await signUp(email.trim(), password, username.trim());
       router.replace('/(tabs)/home');
-    } catch (e: any) { Alert.alert('注册失败', e.message); }
+    } catch (e: any) {
+      const msg = e.message || '未知错误';
+      if (typeof window !== 'undefined') {
+        window.alert('注册失败：' + msg);
+      } else {
+        Alert.alert('注册失败', msg);
+      }
+    }
     setLoading(false);
   };
 

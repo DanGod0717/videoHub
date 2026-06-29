@@ -34,7 +34,8 @@ export function useVideos() {
         user: profileMap[v.user_id] ?? { username: '未知', avatar_url: null },
       })) as Video[];
     },
-    staleTime: 30_000,
+    staleTime: 5_000,
+    refetchOnWindowFocus: true,
   });
 
   return { videos, loading: isLoading, refetch };

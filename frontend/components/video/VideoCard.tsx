@@ -1,5 +1,6 @@
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
+import { supabase } from '../../lib/supabase';
 import type { Video } from '../../types';
 
 export function VideoCard({ video }: { video: Video }) {
@@ -22,12 +23,22 @@ export function VideoCard({ video }: { video: Video }) {
     return `${Math.floor(days / 365)}年前`;
   };
 
+  const getThumbUrl = () => {
+    if (!video.thumbnail_url) return null;
+    // 如果已经是完整 URL 直接返回，否则构建 public URL
+    if (video.thumbnail_url.startsWith('http')) return video.thumbnail_url;
+    const cleanPath = video.thumbnail_url.replace(/^thumbnails\//, '');
+    return supabase.storage.from('thumbnails').getPublicUrl(cleanPath).data.publicUrl;
+  };
+
+  const thumbUrl = getThumbUrl();
+
   return (
     <TouchableOpacity style={styles.card} onPress={() => router.push(`/video/${video.id}`)} activeOpacity={0.85}>
       {/* 封面图 */}
       <View style={styles.coverWrap}>
-        {video.thumbnail_url ? (
-          <Image source={{ uri: video.thumbnail_url }} style={styles.cover} />
+        {thumbUrl ? (
+          <Image source={{ uri: thumbUrl }} style={styles.cover} />
         ) : (
           <View style={styles.coverPlaceholder}>
             <Text style={styles.coverIcon}>🎬</Text>
@@ -59,7 +70,7 @@ export function VideoCard({ video }: { video: Video }) {
 
       {/* 底部 meta */}
       <Text style={styles.meta}>
-        {formatCount(video.view_count)}播放 · {timeAgo(video.created_at)}
+        {formatCount(video.view_count)}播放 · {video.comment_count ?? 0}评论 · {timeAgo(video.created_at)}
       </Text>
     </TouchableOpacity>
   );

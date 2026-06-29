@@ -35,6 +35,7 @@ export default function RootLayout() {
         <Stack.Screen name="auth/register" options={{ presentation: 'modal', animation: 'fade' }} />
         <Stack.Screen name="video/[id]" />
         <Stack.Screen name="user/[id]" />
+        <Stack.Screen name="my-videos" />
       </Stack>
     </QueryClientProvider>
   );

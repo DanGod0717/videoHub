@@ -14,6 +14,10 @@ export default function ProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [stats, setStats] = useState({ videos: 0, followers: 0, following: 0 });
+  const [showMyVideos, setShowMyVideos] = useState(false);
+  const [myVideos, setMyVideos] = useState<any[]>([]);
+  const [editingVideoId, setEditingVideoId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
 
   const pickAvatar = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -79,13 +83,34 @@ export default function ProfileScreen() {
     }
   };
 
+  const fetchMyVideos = () => {
+    if (!user) { window.alert('未登录'); return; }
+    if (showMyVideos) { setShowMyVideos(false); return; }
+    setShowMyVideos(true);
+    supabase.from('videos').select('id,title,status,created_at').eq('user_id', user.id).order('created_at', { ascending: false }).then(({ data, error }: any) => {
+      if (error) { window.alert('加载失败: ' + error.message); setShowMyVideos(false); return; }
+      setMyVideos(data || []);
+    });
+  };
+
+  const deleteVideo = async (videoId: string) => {
+    if (!window.confirm('确定删除这个视频？')) return;
+    await supabase.from('videos').delete().eq('id', videoId);
+    setMyVideos((prev: any) => prev.filter((v: any) => v.id !== videoId));
+    setStats({ ...stats, videos: stats.videos - 1 });
+  };
+
+  const saveVideoTitle = async (videoId: string) => {
+    if (!editTitle.trim()) return;
+    await supabase.from('videos').update({ title: editTitle.trim() }).eq('id', videoId);
+    setMyVideos((prev: any) => prev.map((v: any) => v.id === videoId ? { ...v, title: editTitle.trim() } : v));
+    setEditingVideoId(null);
+    setEditTitle('');
+  };
+
   if (!isLoggedIn) {
     return (
       <View style={styles.container}>
-        <View style={styles.topBar}>
-          <Text style={styles.headerTitle}>我的</Text>
-          <Text style={styles.loginBtn} onPress={() => router.push('/auth/login')}>登录</Text>
-        </View>
         <View style={styles.notLoggedIn}>
           <Text style={styles.notLoggedIcon}>👤</Text>
           <Text style={styles.notLoggedTitle}>登录后查看更多</Text>
@@ -99,14 +124,6 @@ export default function ProfileScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-      {/* 顶部栏 */}
-      <View style={styles.topBar}>
-        <Text style={styles.headerTitle}>我的</Text>
-        <TouchableOpacity onPress={async () => { await signOut(); router.replace('/(tabs)/home'); }}>
-          <Text style={styles.logoutLink}>退出</Text>
-        </TouchableOpacity>
-      </View>
-
       {/* 个人信息卡片 */}
       <View style={styles.card}>
         <TouchableOpacity onPress={pickAvatar} disabled={uploadingAvatar}>
@@ -168,10 +185,10 @@ export default function ProfileScreen() {
 
       {/* 菜单 */}
       <View style={styles.menu}>
-        <View style={styles.menuItem}>
+        <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/my-videos')}>
           <Text style={styles.menuText}>📹 我的视频</Text>
           <Text style={styles.menuArrow}>›</Text>
-        </View>
+        </TouchableOpacity>
         <View style={styles.menuItem}>
           <Text style={styles.menuText}>❤️ 点赞记录</Text>
           <Text style={styles.menuArrow}>›</Text>
@@ -181,6 +198,50 @@ export default function ProfileScreen() {
           <Text style={styles.menuArrow}>›</Text>
         </View>
       </View>
+
+      {/* 我的视频列表 */}
+      {showMyVideos && (
+        <View style={styles.videoListCard}>
+          <View style={styles.videoListHeader}>
+            <Text style={styles.videoListTitle}>我的视频 ({myVideos.length})</Text>
+            <Text style={styles.videoListClose} onPress={() => setShowMyVideos(false)}>收起</Text>
+          </View>
+          {myVideos.length === 0 ? (
+            <Text style={styles.noVideos}>暂无视频</Text>
+          ) : (
+            myVideos.map((v: any) => (
+              <View key={v.id} style={styles.videoRow}>
+                <View style={styles.videoThumb}>
+                  <Text style={styles.videoThumbIcon}>🎬</Text>
+                </View>
+                <View style={styles.videoDetail}>
+                  {editingVideoId === v.id ? (
+                    <View style={styles.editRow}>
+                      <TextInput
+                        style={styles.editInput}
+                        value={editTitle}
+                        onChangeText={setEditTitle}
+                        onSubmitEditing={() => saveVideoTitle(v.id)}
+                      />
+                      <Text style={styles.editAction} onPress={() => saveVideoTitle(v.id)}>保存</Text>
+                      <Text style={styles.editAction} onPress={() => setEditingVideoId(null)}>取消</Text>
+                    </View>
+                  ) : (
+                    <>
+                      <Text style={styles.videoTitle} numberOfLines={1}>{v.title}</Text>
+                      <Text style={styles.videoMeta}>{v.status === 'ready' ? '✅ 已发布' : v.status === 'processing' ? '⏳ 转码中' : '📤 上传中'} · {new Date(v.created_at).toLocaleDateString()}</Text>
+                    </>
+                  )}
+                </View>
+                <View style={styles.videoActions}>
+                  <Text style={styles.actionIcon} onPress={() => { setEditingVideoId(v.id); setEditTitle(v.title); }}>✏️</Text>
+                  <Text style={styles.actionIcon} onPress={() => deleteVideo(v.id)}>🗑️</Text>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+      )}
 
       {/* 创建时间 */}
       <Text style={styles.createdAt}>
@@ -203,6 +264,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e6eb',
   },
   headerTitle: { fontSize: 20, fontWeight: '700', color: '#1a1a2e' },
+  backHome: { fontSize: 14, color: '#666' },
   loginBtn: { color: PINK, fontSize: 14, fontWeight: '600' },
   logoutLink: { color: '#9499a0', fontSize: 14 },
 
@@ -267,6 +329,24 @@ const styles = StyleSheet.create({
   menuItemLast: { borderBottomWidth: 0 },
   menuText: { fontSize: 15, color: '#333' },
   menuArrow: { fontSize: 22, color: '#ccc' },
+
+  // 我的视频列表
+  videoListCard: { backgroundColor: '#fff', margin: 24, borderRadius: 12, padding: 16, maxWidth: 500, alignSelf: 'center', width: '100%' },
+  videoListHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  videoListTitle: { fontSize: 16, fontWeight: '700', color: '#18191c' },
+  videoListClose: { fontSize: 14, color: '#9499a0' },
+  noVideos: { fontSize: 14, color: '#999', textAlign: 'center', padding: 20 },
+  videoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f4f5f7' },
+  videoThumb: { width: 80, height: 50, backgroundColor: '#f0f0ff', borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  videoThumbIcon: { fontSize: 20 },
+  videoDetail: { flex: 1 },
+  videoTitle: { fontSize: 14, fontWeight: '500', color: '#333', marginBottom: 4 },
+  videoMeta: { fontSize: 12, color: '#9499a0' },
+  videoActions: { flexDirection: 'row', gap: 12, marginLeft: 8 },
+  actionIcon: { fontSize: 16, cursor: 'pointer' as any },
+  editRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  editInput: { flex: 1, borderWidth: 1, borderColor: '#e5e6eb', borderRadius: 6, padding: 6, fontSize: 13, outlineStyle: 'none' as any },
+  editAction: { fontSize: 13, color: '#fb7299', fontWeight: '600', cursor: 'pointer' as any },
 
   // 加入时间
   createdAt: { textAlign: 'center', fontSize: 12, color: '#ccc', marginBottom: 24 },
